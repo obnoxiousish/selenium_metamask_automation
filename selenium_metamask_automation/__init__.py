@@ -1,21 +1,33 @@
-import os
-import urllib.request
 import time
 import secrets
+import pyperclip
+import selenium.common
 
 from colorama import Fore
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 
-COLORS = [Fore.RED, Fore.GREEN, Fore.YELLOW, Fore.BLUE, Fore.MAGENTA, Fore.CYAN, Fore.WHITE]
-EXTENSION_PATH = os.getcwd() + '\metamaskExtension.crx'
-EXTENSION_ID = 'nkbihfbeogaeaoehlefnkodbefgpgknn'
+COLORS = [
+    Fore.RED,
+    Fore.GREEN,
+    Fore.YELLOW,
+    Fore.BLUE,
+    Fore.MAGENTA,
+    Fore.CYAN,
+    Fore.WHITE,
+]
+# EXTENSION_PATH = os.getcwd() + '\metamaskExtension.crx'
+EXTENSION_PATH = "metamask-chrome-11.14.4.zip"
+EXTENSION_ID = "nkbihfbeogaeaoehlefnkodbefgpgknn"
 
 
 class MetamaskSelenium:
     """MetamaskSelenium class for automating metamask using selenium"""
-    
+
     def __init__(self, debug=False) -> None:
         """Constructor for MetamaskSelenium class
 
@@ -24,7 +36,7 @@ class MetamaskSelenium:
         """
         self.debug = debug
 
-    def log(self, message, color:any=None) -> bool:
+    def log(self, message, color: any = None) -> bool:
         """Log messages with color
 
         Args:
@@ -36,273 +48,332 @@ class MetamaskSelenium:
         """
         if not color:
             color = secrets.choice(COLORS)
-        
+
         if self.debug:
-            print(f"{color}[debug]{message}{Fore.RESET}")
-            
+            print(f"{color}[debug] {message}{Fore.RESET}")
+
         return True
-        
-    def downloadMetamaskExtension(self) -> bool:
-        """Download metamask extension
+
+    def launchSeleniumWebdriverAndLoadMetamask(
+        self, driverPath: str = None
+    ) -> webdriver.Chrome:
+        """Launch selenium webdriver and load metamask extension
+
+        Args:
+            driverPath (str, optional): Chrome driver exe path. Defaults to None.
+
+        Returns:
+            webdriver.Chrome: Selenium webdriver
+        """
+        if driverPath:
+            self.log(
+                "Driver path was provided, but I do not think it can be used anymore for selenium, sorry.."
+            )
+
+        self.log(f"Path: {EXTENSION_PATH}")
+        # self.log('path', EXTENSION_PATH)
+        chrome_options = Options()
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_extension(EXTENSION_PATH)
+        self.driver = webdriver.Chrome(options=chrome_options)
+        # time.sleep(5)
+        self.log("Extension has been loaded")
+        return self.driver
+
+    def waitAndClick(
+        self, byTag: any = By.ID, tagValue: str = None, wait: int = 10
+    ) -> bool:
+        """Wait and click on element
+
+        Args:
+            byTag (any, optional): By.ID, By.XPATH, etc. Defaults to By.ID.
+            tagValue (str, optional): Tag value, like 'onboarding__terms-checkbox'. Defaults to None.
+            wait (int, optional): Wait time. Defaults to 10.
 
         Returns:
             bool: True/False
         """
-        self.log('Setting up metamask extension please wait...')
-        url = 'https://xord-testing.s3.amazonaws.com/selenium/10.0.2_0.crx'
-        urllib.request.urlretrieve(f"{url}", f"{os.getcwd()}/metamaskExtension.crx")
+        try:
+            element = WebDriverWait(self.driver, wait).until(
+                EC.element_to_be_clickable((byTag, tagValue))
+            )
+            time.sleep(1)
+            element.click()
+            return True
+        
+        except selenium.common.exceptions.ElementClickInterceptedException:
+            time.sleep(30)
+            self.driver.refresh()
+            return False
+        
+        except Exception as e:
+            self.log(f"Error While Waiting to Click: {e}")
+            return False
+
+    def importSeedToMetamask(self, recoveryPhrase: str, password: str) -> bool:
+        """Import seed to metamask
+
+        Args:
+            recoveryPhrase (str): Recovery phrase, 12~ words
+            password (str): Password for metamask
+
+        Returns:
+            bool: True/False
+        """
+        for rt in range(3):
+            try:
+                self.driver.switch_to.window(self.driver.window_handles[1])
+                break
+            except Exception:
+                if rt == 2:
+                    print("failed to switch to metamask window")
+                    return False
+
+        self.waitAndClick(byTag=By.ID, tagValue="onboarding__terms-checkbox")
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[contains(text(), "Import an existing wallet")]',
+        )
+        self.waitAndClick(
+            byTag=By.XPATH, tagValue='//button[contains(text(), "I agree")]'
+        )
+
+        inputs = self.driver.find_elements(By.XPATH, "//input")
+        pyperclip.copy(recoveryPhrase)  # Probably unreliable lol
+        inputs[0].send_keys(Keys.CONTROL, "v")
+
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[contains(text(), "Confirm Secret Recovery Phrase")]',
+        )
+
+        passwordInputs = self.driver.find_elements(By.XPATH, "//input")
+
+        for pwInput in passwordInputs:
+            pwInput.send_keys(password)
+
+        self.waitAndClick(
+            byTag=By.XPATH, tagValue='//input[@data-testid="create-password-terms"]'
+        )
+        self.waitAndClick(
+            byTag=By.XPATH, tagValue='//button[contains(text(), "Import my wallet")]'
+        )
+        self.waitAndClick(
+            byTag=By.XPATH, tagValue='//button[contains(text(), "Got it")]'
+        )
+        #self.waitAndClick(
+        #    byTag=By.XPATH, tagValue='//button[contains(text(), "Got it")]'
+        #)
+        self.waitAndClick(byTag=By.XPATH, tagValue='//button[contains(text(), "Next")]')
+        self.waitAndClick(byTag=By.XPATH, tagValue='//button[contains(text(), "Done")]')
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[contains(text(), "Enable")]',
+        )
+
+        # <span class="mm-box mm-text multichain-account-picker__label mm-text--body-md mm-text--font-weight-bold mm-text--ellipsis mm-box--color-text-default">Account 1</span>
+        # if this element exists, then we have successfully imported the wallet
+
+        if self.driver.find_elements(By.XPATH, '//span[contains(text(), "Account 1")]'):
+            self.log("Wallet has been imported successfully")
+            return True
+
+        self.log("Wallet import failed")
+        return False
+
+    def confirmWebsiteNetworkAddition(self):
+        if not self.waitForMetamaskWindow():
+            return False
+
+        self.driver.switch_to.window(self.driver.window_handles[2])
+
+        # <button class="button btn--rounded btn-primary" data-testid="confirmation-submit-button">Approve</button>
+
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="confirmation-submit-button"]',
+        )
+
         return True
 
+    def confirmWebsiteSwitchNetwork(self):
+        if not self.waitForMetamaskWindow():
+            return False
 
-    def launchSeleniumWebdriver(self, driverPath:str=None):
-        if driverPath:
-            self.log('Driver path was provided, but I do not think it can be used anymore for selenium, sorry..')
-        self.log(f"Path: {EXTENSION_PATH}")
-        #self.log('path', EXTENSION_PATH)
-        chrome_options = Options()
-        chrome_options.add_extension(EXTENSION_PATH)
-        self.driver = webdriver.Chrome(options=chrome_options)
-        #time.sleep(5)
-        self.log("Extension has been loaded")
-        return self.driver
+        self.driver.switch_to.window(self.driver.window_handles[2])
 
+        # <button class="button btn--rounded btn-primary" data-testid="confirmation-submit-button">Switch Network</button>
 
-    def metamaskSetup(self, recoveryPhrase, password):
-        self.driver.switch_to.window(self.driver.window_handles[0])
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="confirmation-submit-button"]',
+        )
 
-        time.sleep(100000)
+        return True
 
-        self.driver.find_element(By.XPATH, "//button[contains(text(), 'Get Started')]").click()
-
-        self.driver.find_element(By.XPATH,'//button[contains(text(), "Import wallet")]').click()
-        self.driver.find_element(By.XPATH,'//button[contains(text(), "No Thanks")]').click()
-        time.sleep(5)
-
-        inputs = self.driver.find_elements(By.XPATH,'//input')
-        inputs[0].send_keys(recoveryPhrase)
-        inputs[1].send_keys(password)
-        inputs[2].send_keys(password)
-        self.driver.find_element(By.CSS_SELECTOR, '.first-time-flow__terms').click()
-        self.driver.find_element(By.XPATH,'//button[contains(text(), "Import")]').click()
-
-        time.sleep(5)
-
-        self.driver.find_element(By.XPATH,'//button[contains(text(), "All Done")]').click()
-        time.sleep(2)
-
-        # closing the message popup after all done metamask screen
-        self.driver.find_element(By.XPATH,'//*[@id="popover-content"]/div/div/section/header/div/button').click()
-        time.sleep(2)
-        self.log("Wallet has been imported successfully")
-        time.sleep(10)
-
-
-    def changeMetamaskNetwork(self, networkName):
-        # opening network
-        self.log("Changing network")
-        self.driver.switch_to.window(self.driver.window_handles[1])
-        self.driver.get('chrome-extension://{}/home.html'.format(EXTENSION_ID))
-        self.log("closing popup")
-        time.sleep(5)
-        self.driver.find_element(By.XPATH, '//*[@id="popover-content"]/div/div/section/header/div/button').click()
-
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[1]/div/div[2]/div[1]/div/span').click()
-        time.sleep(2)
-        self.log("opening network dropdown")
-        elem = self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div')
-        time.sleep(2)
-        all_li = elem.find_elements(By.TAG_NAME, "li")
-        time.sleep(2)
-        for li in all_li:
-            text = li.text
-            if (text == networkName):
-                li.click()
-                self.log(text, "is selected")
-                time.sleep(2)
-                self.driver.switch_to.window(self.driver.window_handles[0])
+    def waitForMetamaskWindow(self, switch=True):
+        for i in range(5):
+            if len(self.driver.window_handles) < 3:
+                if i == 4:
+                    self.log("Failed waiting for metamask")
+                    return False
                 time.sleep(3)
-                return
-        time.sleep(2)
-        self.log("Please provide a valid network name")
-
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
-
-    def addMetamaskNetwork(self, network_name, rpc_url, chain_id, currency_symbol):
-        self.log("Adding network")
-        self.driver.switch_to.window(self.driver.window_handles[1])
-        self.driver.get('chrome-extension://{}/home.html#settings/networks/add-network'.format(EXTENSION_ID))
-        self.log('get add network page')
-
-        self.driver.find_element(By.XPATH,'//button[contains(text(), "Add Network")]').click()
-
-        inputs = self.driver.find_elements(By.XPATH,'//input')
-        inputs[0].send_keys(network_name)
-        inputs[1].send_keys(rpc_url)
-        inputs[2].send_keys(chain_id)
-        inputs[3].send_keys(currency_symbol)
-        self.driver.find_element(By.XPATH,'//button[contains(text(), "Save")]').click()
-        time.sleep(2)
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
+            else:
+                if switch:
+                    self.driver.switch_to.window(self.driver.window_handles[-1])
+                return True
 
     def connectToWebsite(self):
-        time.sleep(3)
+        if not self.waitForMetamaskWindow():
+            return False
 
-        self.driver.execute_script("window.open('');")
-        self.driver.switch_to.window(self.driver.window_handles[1])
+        self.driver.switch_to.window(self.driver.window_handles[2])
 
-        self.driver.get('chrome-extension://{}/popup.html'.format(EXTENSION_ID))
-        time.sleep(5)
-        self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight)")
-        time.sleep(3)
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[2]/div[4]/div[2]/button[2]').click()
-        time.sleep(1)
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[2]/div[2]/div[2]/footer/button[2]').click()
-        time.sleep(3)
-        self.log('Site connected to metamask')
-        self.log(self.driver.window_handles)
+        # <button class="button btn--rounded btn-primary page-container__footer-button" data-testid="page-container-footer-next">Next</button>
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="page-container-footer-next"]',
+        )
+
+        # <button class="button btn--rounded btn-primary page-container__footer-button" data-testid="page-container-footer-next">Confirm</button>
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="page-container-footer-next"]',
+        )
+
+        return True
+
+    def confirmNetworkChange(self):
+        # <button class="mm-box mm-text mm-button-base mm-button-base--size-md footer__button mm-button-primary mm-text--body-md-medium mm-box--padding-0 mm-box--padding-right-4 mm-box--padding-left-4 mm-box--display-inline-flex mm-box--justify-content-center mm-box--align-items-center mm-box--color-primary-inverse mm-box--background-color-primary-default mm-box--rounded-pill"><span class="mm-box mm-text mm-text--inherit mm-box--color-primary-inverse"><h6 class="mm-box mm-text mm-text--body-sm mm-box--color-inherit">Got it</h6></span></button>
+
+        if not self.waitForMetamaskWindow():
+            return False
+
+        self.driver.switch_to.window(self.driver.window_handles[2])
+
+        #self.waitAndClick(byTag=By.XPATH, tagValue='//h6[contains(text(), "Got it")]')
+
+        return True
+
+    def hitNextMetaMask(self):
+        # <button class="button btn--rounded btn-primary page-container__footer-button" data-testid="page-container-footer-next">Next</button>
+
+        if not self.waitForMetamaskWindow():
+            return False
+
+        self.driver.switch_to.window(self.driver.window_handles[2])
+
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="page-container-footer-next"]',
+        )
+
+        return True
+
+    def changeSpendingCap(self):
+        # <input class="mm-box mm-text mm-input mm-input--disable-state-styles mm-text-field__input mm-text--body-md mm-box--margin-0 mm-box--padding-0 mm-box--padding-right-2 mm-box--padding-left-4 mm-box--padding-inline-end-4 mm-box--color-error-default mm-box--background-color-transparent mm-box--border-style-none" autocomplete="off" id="custom-spending-cap" placeholder="Enter a number" type="text" data-testid="custom-spending-cap-input" focused="false" value="115792089237316195423570985008687907853269984665640564039457584007913129.639935">
+
+        if not self.waitForMetamaskWindow():
+            return False
+
+        self.driver.switch_to.window(self.driver.window_handles[2])
+
+        # <button class="mm-box mm-text mm-button-base mm-button-link mm-button-link--size-auto mm-text--body-md-medium mm-box--padding-0 mm-box--padding-right-0 mm-box--padding-left-0 mm-box--display-inline-flex mm-box--justify-content-center mm-box--align-items-center mm-box--color-primary-default mm-box--background-color-transparent">Edit</button>
+
+        # self.waitAndClick(byTag=By.XPATH, tagValue='//button[contains(text(), "Edit")]')
+
+        # (By.XPATH, '//input[@data-testid="custom-spending-cap-input"]')
+
+        spendingCapInput = self.waitAndFind(
+            byTag=By.XPATH, tagValue='//input[@data-testid="custom-spending-cap-input"]'
+        )
+
+        spendingCapInput.send_keys(Keys.CONTROL + "a" + Keys.DELETE)
+        spendingCapInput.send_keys("10000")
+
+        # <button class="button btn--rounded btn-primary page-container__footer-button" data-testid="page-container-footer-next">Next</button>
+        self.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="page-container-footer-next"]',
+        )
+
+        # <button class="mm-box mm-text mm-button-base mm-button-link mm-button-link--size-auto mm-text--body-md-medium mm-box--padding-0 mm-box--padding-right-0 mm-box--padding-left-0 mm-box--display-inline-flex mm-box--justify-content-center mm-box--align-items-center mm-box--color-primary-default mm-box--background-color-transparent">I want to proceed anyway</button>
+        #self.waitAndClick(
+        #    byTag=By.XPATH,
+        #    tagValue='//button[contains(text(), "I want to proceed anyway")]',
+        #)
+
+        # <button class="button btn--rounded btn-primary page-container__footer-button" data-testid="page-container-footer-next" disabled="">Approve</button>
+        # self.waitAndClick(byTag=By.XPATH, tagValue='//button[@data-testid="page-container-footer-next"]')
+
+        return True
+
+    def waitAndFind(self, byTag: any = By.ID, tagValue: str = None, wait: int = 10):
+        """Like wait and click, but waits until element is found and returns it"""
+
+        element = WebDriverWait(self.driver, wait).until(
+            EC.presence_of_element_located((byTag, tagValue))
+        )
+
+        return element
+
+    def approveTransaction(self):
+        # <div>Successfully approved</div>
+
         self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
 
+        if self.waitAndFind(
+            byTag=By.XPATH,
+            tagValue='//div[contains(text(), "Successfully approved")]',
+            wait=45
+        ):
+            return True
+        
+        return False
+    
+    def approveApproval(self):
+        metamaskWindowAppeared = self.metamaskSelenium.waitForMetamaskWindow()
 
-    def confirmApprovalFromMetamask(self):
-        self.driver.execute_script("window.open('');")
-        self.driver.switch_to.window(self.driver.window_handles[1])
+        if not metamaskWindowAppeared:
+            return False
 
-        self.driver.get('chrome-extension://{}/popup.html'.format(EXTENSION_ID))
-        time.sleep(10)
-        self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight)")
-        time.sleep(10)
-        # confirm approval from metamask
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[4]/footer/button[2]').click()
-        time.sleep(12)
-        self.log("Approval transaction confirmed")
+        # Switch to 2 window handle
 
-        # switch to dafi
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
+        self.selenium.switch_to.window(self.selenium.window_handles[2])
 
+        # <h6 class="mm-box mm-text mm-text--body-sm mm-box--color-inherit">Got it</h6>
 
-    def rejectApprovalFromMetamask(self):
-        self.driver.execute_script("window.open('');")
-        self.driver.switch_to.window(self.driver.window_handles[1])
+        self.metamaskSelenium.waitAndClick(
+            byTag=By.XPATH, tagValue='//h6[contains(text(), "Got it")]', wait=10
+        )
 
-        self.driver.get('chrome-extension://{}/popup.html'.format(EXTENSION_ID))
-        time.sleep(10)
-        self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight)")
-        time.sleep(10)
-        # confirm approval from metamask
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[4]/footer/button[1]').click()
-        time.sleep(8)
-        self.log("Approval transaction rejected")
+        # <button class="button btn--rounded btn-primary page-container__footer-button" data-testid="page-container-footer-next">Next</button>
 
-        # switch to dafi
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
-        self.log("Reject approval from metamask")
+        self.metamaskSelenium.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="page-container-footer-next"]',
+            wait=10,
+        )
 
+        # <button class="button btn--rounded btn-primary page-container__footer-button" data-testid="page-container-footer-next" disabled="">Approve</button>
 
-    def confirmTransactionFromMetamask(self):
-        self.driver.execute_script("window.open('');")
-        self.driver.switch_to.window(self.driver.window_handles[1])
+        self.metamaskSelenium.waitAndClick(
+            byTag=By.XPATH,
+            tagValue='//button[@data-testid="page-container-footer-next"]',
+            wait=10,
+        )
 
-        self.driver.get('chrome-extension://{}/popup.html'.format(EXTENSION_ID))
-        time.sleep(10)
-        self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight)")
-        time.sleep(10)
+        return True
 
-        # # confirm transaction from metamask
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[3]/div[3]/footer/button[2]').click()
-        time.sleep(13)
-        self.log("Transaction confirmed")
+    def waitAndSendKeys(
+        self, keys: str, tagValue: str, byTag: any = By.ID, wait: int = 10
+    ) -> bool:
+        element = WebDriverWait(self.driver, wait).until(
+            EC.presence_of_element_located((byTag, tagValue))
+        )
 
-        # switch to dafi
-        self.driver.switch_to.window(self.driver.window_handles[0])
+        element.clear()
+        element.send_keys(keys)
 
-        time.sleep(3)
-
-
-    def rejectTransactionFromMetamask(self):
-        self.driver.execute_script("window.open('');")
-        self.driver.switch_to.window(self.driver.window_handles[1])
-
-        self.driver.get('chrome-extension://{}/popup.html'.format(EXTENSION_ID))
-        time.sleep(5)
-        self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight)")
-        time.sleep(5)
-        # confirm approval from metamask
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[3]/div[3]/footer/button[1]').click()
-        time.sleep(2)
-        self.log("Transaction rejected")
-
-        # switch to web window
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
-
-    def addToken(self, tokenAddress):
-        # opening network
-        self.log("Adding Token")
-        self.driver.switch_to.window(self.driver.window_handles[1])
-        self.driver.get('chrome-extension://{}/home.html'.format(EXTENSION_ID))
-        self.log("closing popup")
-        time.sleep(5)
-        self.driver.find_element(By.XPATH, '//*[@id="popover-content"]/div/div/section/header/div/button').click()
-
-        # driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[1]/div/div[2]/div[1]/div/span').click()
-        # time.sleep(2)
-
-        self.log("clicking add token button")
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[4]/div/div/div/div[3]/div/div[3]/button').click()
-        time.sleep(2)
-        # adding address
-        self.driver.find_element(By.ID, "custom-address").send_keys(tokenAddress)
-        time.sleep(10)
-        # clicking add
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[4]/div/div[2]/div[2]/footer/button[2]').click()
-        time.sleep(2)
-        # add tokens
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[4]/div/div[3]/footer/button[2]').click()
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
-
-    def signConfirm(self):
-        self.log("sign")
-        time.sleep(3)
-
-        self.driver.execute_script("window.open('');")
-        self.driver.switch_to.window(self.driver.window_handles[1])
-
-        self.driver.get('chrome-extension://{}/popup.html'.format(EXTENSION_ID))
-        time.sleep(5)
-        self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight)")
-        time.sleep(3)
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[3]/button[2]').click()
-        time.sleep(1)
-        # driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[2]/div[2]/div[2]/footer/button[2]').click()
-        # time.sleep(3)
-        self.log('Sign confirmed')
-        self.log(self.driver.window_handles)
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
-
-
-    def signReject(self):
-        self.log("sign")
-        time.sleep(3)
-
-        self.driver.execute_script("window.open('');")
-        self.driver.switch_to.window(self.driver.window_handles[1])
-
-        self.driver.get('chrome-extension://{}/popup.html'.format(EXTENSION_ID))
-        time.sleep(5)
-        self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight)")
-        time.sleep(3)
-        self.driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[3]/button[1]').click()
-        time.sleep(1)
-        # driver.find_element(By.XPATH, '//*[@id="app-content"]/div/div[3]/div/div[2]/div[2]/div[2]/footer/button[2]').click()
-        # time.sleep(3)
-        self.log('Sign rejected')
-        self.log(self.driver.window_handles)
-        self.driver.switch_to.window(self.driver.window_handles[0])
-        time.sleep(3)
+        return True
