@@ -2,6 +2,7 @@ import time
 import secrets
 import pyperclip
 import selenium.common
+import random
 
 from colorama import Fore
 from selenium import webdriver
@@ -75,6 +76,7 @@ class MetamaskSelenium:
         chrome_options = Options()
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument("--disable-dev-shm-usage")
+        time.sleep(random.randint(1, 10))
         chrome_options.add_extension(EXTENSION_PATH)
         self.driver = webdriver.Chrome(options=chrome_options)
         # time.sleep(5)
