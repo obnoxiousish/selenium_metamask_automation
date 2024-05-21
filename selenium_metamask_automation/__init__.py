@@ -177,8 +177,41 @@ class MetamaskSelenium:
 
         if self.driver.find_elements(By.XPATH, '//span[contains(text(), "Account 1")]'):
             self.log("Wallet has been imported successfully")
-            return True
+            
+            # Open accoutn details to parse addy
+            # <button class="mm-box mm-button-icon mm-button-icon--size-sm mm-box--display-inline-flex mm-box--justify-content-center mm-box--align-items-center mm-box--color-icon-default mm-box--background-color-transparent mm-box--rounded-lg" aria-label="Account options" data-testid="account-options-menu-button"><span class="mm-box mm-icon mm-icon--size-sm mm-box--display-inline-block mm-box--color-inherit" style="mask-image: url(&quot;./images/icons/more-vertical.svg&quot;);"></span></button>
+            # <button class="menu-item" data-testid="account-list-menu-details"><span class="mm-box mm-icon mm-icon--size-sm mm-box--margin-right-2 mm-box--display-inline-block mm-box--color-inherit" style="mask-image: url(&quot;./images/icons/scan-barcode.svg&quot;);"></span><div><div>Account details</div></div></button>
+            # <button class="mm-box mm-text mm-button-base mm-button-base--size-sm multichain-address-copy-button multichain-address-copy-button__address--wrap mm-text--body-sm mm-box--padding-0 mm-box--padding-right-4 mm-box--padding-left-4 mm-box--display-inline-flex mm-box--justify-content-center mm-box--align-items-center mm-box--color-primary-default mm-box--background-color-primary-muted mm-box--rounded-pill" data-testid="address-copy-button-text"><span class="mm-box mm-text mm-text--inherit mm-box--color-primary-default"><div class="mm-box mm-box--display-flex">0x31922557f488f78CD34d56595FC02E153adc8cBA</div></span><span class="mm-box mm-icon mm-icon--size-sm mm-box--margin-inline-start-1 mm-box--display-inline-block mm-box--color-inherit" style="mask-image: url(&quot;./images/icons/copy.svg&quot;);"></span></button>
+            
+            # click button containing text No thanks
+            
+            self.waitAndClick(
+                byTag=By.XPATH,
+                tagValue='//button[contains(text(), "No thanks")]',
+            )
+            
+            # first button to open ... menu
+            self.waitAndClick(
+                byTag=By.XPATH,
+                tagValue='//button[@data-testid="account-options-menu-button"]',
+            )
+            
+            # 2nd button to click Open Accoutn Details
+            self.waitAndClick(
+                byTag=By.XPATH,
+                tagValue='//button[@data-testid="account-list-menu-details"]',
+            )
+            
+            # find address text in page source and store it in mongo
+            addy = self.driver.page_source.split('<div class="mm-box mm-box--display-flex">')[1].split('</div>')[0]
+            
+            print(f'found {addy}')
+            
+            return {"success": True, "addy": addy}
+        
 
+
+        
         self.log("Wallet import failed")
         return False
 
@@ -252,7 +285,7 @@ class MetamaskSelenium:
 
         self.driver.switch_to.window(self.driver.window_handles[2])
 
-        #self.waitAndClick(byTag=By.XPATH, tagValue='//h6[contains(text(), "Got it")]')
+        self.waitAndClick(byTag=By.XPATH, tagValue='//h6[contains(text(), "Got it")]')
 
         return True
 
